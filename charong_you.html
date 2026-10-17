@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>차롱 DISCORD 시뮬레이터</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;margin:0;padding:0;background:#000000;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,"Noto Sans KR",sans-serif;color:#dbdee1;overflow:hidden}
+.app{max-width:520px;width:100%;height:100vh;height:100dvh;min-height:0;margin:0 auto;background:#313338;display:flex;flex-direction:column;position:relative;overflow:hidden}
+/* 모바일 브라우저 높이와 하단 입력 영역 대응 */
+.header,.controls{flex-shrink:0}
+#chat{min-height:0;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.controls{padding-bottom:max(12px, env(safe-area-inset-bottom))}
+form{min-height:44px}
+input,button{touch-action:manipulation}
+@media (max-width:600px){
+  .header{padding:10px 14px}
+  #chat{padding:12px;gap:14px}
+  .controls{padding-left:10px;padding-right:10px}
+  .quick-btns{gap:6px}
+  .quick-btn{max-width:100%;white-space:normal;text-align:left;line-height:1.3;padding:8px 11px}
+  form{gap:8px;padding:6px 10px}
+  button[type="submit"]{padding:8px 12px;white-space:nowrap}
+}
+
+/* 아이폰 잠금화면 */
+#lockscreen{position:absolute;top:0;left:0;width:100%;height:100%;background:#000000;z-index:100;display:flex;flex-direction:column;align-items:center;padding-top:60px;transition:transform 0.4s ease-out, opacity 0.4s ease-out;overflow:hidden}
+#lockscreen.hide{transform:translateY(-100%);opacity:0;pointer-events:none}
+
+/* iOS 시계 및 날짜 */
+.lock-clock-container{display:flex;flex-direction:column;align-items:center;margin-top:20px;margin-bottom:24px;color:#ffffff}
+.lock-date{font-size:19px;font-weight:600;letter-spacing:-0.2px;opacity:0.9;margin-bottom:4px}
+.lock-time{font-size:84px;font-weight:300;line-height:1;letter-spacing:-2px}
+
+/* 디스코드 알림 리스트 */
+.notif-container{width:92%;max-height:65vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-bottom:20px}
+.notif-container::-webkit-scrollbar{display:none}
+
+.notification{background:rgba(43, 45, 49, 0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:18px;padding:14px 18px;cursor:pointer;border:1px solid rgba(255,255,255,0.08);box-shadow:0 8px 24px rgba(0,0,0,0.5);animation:slideDown 0.25s ease-out}
+.notification:active{background:rgba(53, 55, 60, 0.95);transform:scale(0.98)}
+
+@keyframes slideDown{
+  from{opacity:0;transform:translateY(-12px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+.notif-header{display:flex;align-items:center;gap:6px;font-size:13px;color:#949ba4;margin-bottom:6px;font-weight:700}
+.notif-title{font-size:14px;letter-spacing:0.5px;color:#5865F2}
+.notif-body{font-size:16px;color:#f2f3f5;font-weight:600;line-height:1.4;word-break:break-all}
+
+/* 디스코드 메인 헤더 */
+.header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#313338;border-bottom:1px solid #1f2023;z-index:2}
+.header-left{display:flex;align-items:center;gap:12px}
+.back-btn{color:#b5bac1;font-size:20px;cursor:pointer}
+.channel-info{display:flex;flex-direction:column}
+.channel-title{font-size:17px;font-weight:700;color:#f2f3f5;display:flex;align-items:center;gap:4px}
+.online-status{font-size:11px;color:#949ba4;display:flex;align-items:center;gap:4px;margin-top:2px}
+.status-dot{width:7px;height:7px;background:#23a55a;border-radius:50%}
+
+/* 채팅 영역 */
+#chat{padding:16px;flex:1;overflow-y:auto;background:#313338;display:flex;flex-direction:column;gap:16px}
+#chat::-webkit-scrollbar{width:4px}
+#chat::-webkit-scrollbar-thumb{background:#1a1b1e;border-radius:4px}
+
+.date-divider{display:flex;align-items:center;text-align:center;color:#949ba4;font-size:12px;font-weight:600;margin:8px 0}
+.date-divider::before, .date-divider::after{content:'';flex:1;border-bottom:1px solid #3f4147}
+.date-divider span{padding:0 12px}
+
+/* 디스코드 메시지 스타일 */
+.msg{display:flex;gap:12px;align-items:flex-start}
+.avatar{width:40px;height:40px;border-radius:50%;background:#5865F2;display:grid;place-items:center;color:white;font-weight:bold;font-size:16px;flex-shrink:0;overflow:hidden}
+.msg-content{display:flex;flex-direction:column;gap:2px;flex:1}
+.msg-header{display:flex;align-items:baseline;gap:8px}
+.username{font-size:15px;font-weight:700;color:#f2f3f5}
+.username.me{color:#5865F2}
+.timestamp{font-size:11px;color:#949ba4}
+.msg-text{font-size:15px;color:#dbdee1;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+
+/* 하단 컨트롤 및 입력창 */
+.controls{padding:8px 12px 12px 12px;background:#313338}
+
+.quick-btns{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.quick-btn{background:#2b2d31;color:#5865F2;border:1px solid #4e5058;padding:8px 14px;border-radius:18px;font-size:13px;font-weight:700;cursor:pointer}
+.quick-btn.disabled{background:#2b2d31;color:#4e5058;border-color:#383a40;cursor:not-allowed}
+.quick-btn.used{background:#2b2d31;color:#80848e;border-color:#383a40;cursor:not-allowed}
+
+form{display:flex;gap:10px;background:#383a40;padding:6px 12px;border-radius:20px;align-items:center}
+.plus-btn{width:24px;height:24px;border-radius:50%;background:#4e5058;color:#b5bac1;display:grid;place-items:center;font-size:16px;font-weight:bold}
+input{flex:1;min-width:0;border:none;background:transparent;padding:8px 0;font-size:14px;color:#f2f3f5;outline:none}
+input::placeholder{color:#80848e}
+button[type="submit"]{border:0;border-radius:16px;background:#5865F2;color:white;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 아이폰 잠금화면 -->
+  <div id="lockscreen">
+    <!-- 시계 및 날짜 -->
+    <div class="lock-clock-container">
+      <div class="lock-date" id="lockDate">8월 22일 (토)</div>
+      <div class="lock-time" id="lockTime">2:12</div>
+    </div>
+
+    <!-- 알림 목록 -->
+    <div class="notif-container" id="notifContainer"></div>
+  </div>
+
+  <!-- 디스코드 헤더 -->
+  <header class="header">
+    <div class="header-left">
+      <span class="back-btn">←</span>
+      <div class="channel-info">
+        <div class="channel-title"># 일반</div>
+        <div class="online-status"><span class="status-dot"></span>1명 온라인</div>
+      </div>
+    </div>
+  </header>
+  
+  <main id="chat"></main>
+
+  <section class="controls">
+    <div class="quick-btns">
+      <button type="button" class="quick-btn" data-msg="욕 좀 하지 마라" data-id="1">욕 좀 하지 마라</button>
+      <button type="button" class="quick-btn disabled" data-msg="만렙 찍으면 차단 풀 거니까 기다려" data-id="2" id="btn2">만렙 찍으면 차단 풀 거니까 기다려</button>
+    </div>
+
+    <form id="form">
+      <div class="plus-btn">+</div>
+      <input id="message" autocomplete="off" placeholder="#일반에 메시지 보내기">
+      <button type="submit">전송</button>
+    </form>
+  </section>
+</div>
+
+<script>
+(function initApp() {
+  const chat = document.getElementById('chat');
+  const form = document.getElementById('form');
+  const input = document.getElementById('message');
+  const quickBtns = document.querySelectorAll('.quick-btn');
+  const btn2 = document.getElementById('btn2');
+  const lockscreen = document.getElementById('lockscreen');
+  const notifContainer = document.getElementById('notifContainer');
+  const lockDateEl = document.getElementById('lockDate');
+
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  document.getElementById('lockTime').textContent = hours + ':' + minutes;
+
+  const phase1Lines = [
+    ['20XX. 08. 22','형'],
+    ['20XX. 08. 22','저 진짜 차단했어요??????'],
+    ['20XX. 08. 22','아니 왜요?? 걍 장난인데'],
+    ['20XX. 08. 22','그렇게 로갓해 버리면 어케요'],
+    ['20XX. 08. 22','형 차단하면 귓말도 못 받고 우편도 못 받고 저랑 파티도 못 하고 그러는데'],
+    ['20XX. 08. 22','근데 잠깐이면 얼마 동안이에요??'],
+    ['20XX. 08. 22','내일 풀어줄 거죠?? 길갑하라고 안 할게요ㅠㅠ'],
+    ['20XX. 08. 23','아니 보챗 답장도 없구'],
+    ['20XX. 08. 23','사람 말 왜 무시해요'],
+    ['20XX. 08. 23','읽었음 읽었다 아님 아니다 말을 해야지'],
+    ['20XX. 08. 23','솔직히 전 혼자 겜하는 거 익숙해서'],
+    ['20XX. 08. 23','크게 타격 있는 것도 아니에요 형만 아쉽게 됐져 제가 캐리해 줄 수 있었는데'],
+    ['20XX. 08. 23','형은 굴러들어온 복을 걷어찬 거임'],
+    ['20XX. 08. 23','저 형 주려고 룩템도 사놨는데 다 갖다 팔 거예요 후회 ㄴㄴ'],
+    ['20XX. 08. 24','위치 제보 안 받을게요'],
+    ['20XX. 08. 24','현질 했어요? 골드가 왤케 많아요???'],
+    ['20XX. 08. 24','제발 거지 새끼들한테 웃돈 뿌리지 마요 좀'],
+    ['20XX. 08. 24','뭐 1년 지나도 봉사 활동하는 거 변함이 없네'],
+    ['20XX. 08. 24','겜에서 기부하면 세금 환급도 못 받음ㅡㅡ'],
+    ['20XX. 08. 25','아직도 화 안 풀렸어요?'],
+    ['20XX. 08. 25','짐 차단 풀어주면 다신 안 그럴게여...'],
+    ['20XX. 08. 25','저 반성 중인데 ㅠ'],
+    ['20XX. 08. 26','형형'],
+    ['20XX. 08. 26','오늘 누가 저 습격했어여ㅠㅠㅠㅠ 막 때렸어요ㅠㅠ'],
+    ['20XX. 08. 26','분쟁 지역 무서워서 못 가겠어요ㅠ'],
+    ['20XX. 08. 26','형 겜은 계속 접하는 거 같던데'],
+    ['20XX. 08. 26','아니 이건 위치 제보 받아서 아는 거 아님 진짜'],
+    ['20XX. 08. 26','걍 서포터의 직감'],
+    ['20XX. 08. 27','보챗은 삭제 안 했짜나요ㅠㅠㅠ'],
+    ['20XX. 08. 27','이건 답장할 수 있잖아요ㅠㅠ'],
+    ['20XX. 08. 27','형 저 트라우마 와요ㅠㅠㅠㅠㅠㅠ'],
+    ['20XX. 08. 27','저 읽씹당하는 거 살면서 첨임 진짜루요ㅠ'],
+    ['20XX. 08. 27','인겜에서 차단하면 자동으로 친삭도 되는 거 아세요?? 개좃망겜'],
+    ['20XX. 08. 27','저 친구창에 형밖에 없는데 진짜 너무해요ㅠㅠ'],
+    ['20XX. 08. 27','머라고 하는 거 아님'],
+    ['20XX. 08. 27','걍 서운하다구요'],
+    ['20XX. 08. 27','지금 우는 중ㅠㅠㅠㅠ 이 정글 같은 곳에 저 혼자 다니고 있자나요ㅠ 넘 무서워요 주변에 사기꾼들밖에 없어여'],
+    ['20XX. 08. 28','아니 근데'],
+    ['20XX. 08. 28','진짜 점 하나만 보내봐요 설마 보챗도 삭제함???'],
+    ['20XX. 08. 28','아니 ㅅㅂ 보챗도 삭제한 거 아니죠 인겜 차단만 한다면서요'],
+    ['20XX. 08. 28','개같은 앱'],
+    ['20XX. 08. 28','읽음 표시 안 떠서 뭐 읽씹인지 걍씹인지 알 수가 없음'],
+    ['20XX. 08. 28','근데 보챗 삭제한단 말은 안 했으면서'],
+    ['20XX. 08. 28','삭제한 거면 존나 실망ㅡㅡ']
+  ];
+
+  const phase2Lines = [
+    ['20XX. 08. 28','헐?? 형아ㅠㅠㅠㅠㅠ'],
+    ['20XX. 08. 28','자동완성 오류인가ㅠㅠ?'],
+    ['20XX. 08. 28','손가락 미끄러져서 잘못 눌렀나 봐요 그럴 때 있자나요ㅠ 제가 욕한 거 아니에요'],
+    ['20XX. 08. 28','폰이 넘 작아서 가끔 실수로 버튼 잘못 눌러요ㅠㅠ'],
+    ['20XX. 08. 28','근데 형 지금 렙 몇이에요??'],
+    ['20XX. 08. 28','저 제한 풀리고 3일 만에 만렙 찍었는데 형은 왤케 느려요ㅠㅠㅠ'],
+    ['20XX. 08. 28','머라고 하는 건 아니구'],
+    ['20XX. 08. 28','힘들면 도와줄 수 있단 소린데'],
+    ['20XX. 08. 28','저랑 매칭 돌리면 던전매칭도 개빠른 거 아시져'],
+    ['20XX. 08. 28','저 형 장비 제작 재료들 다 사놨는데ㅠㅠㅠㅠㅠㅠㅠ 차단당해서 우편도 못 보내는데'],
+    ['20XX. 08. 28','차단 잠만 풀면 안대여? 우편만 보낼게요'],
+    ['20XX. 08. 28','저 예민해서 이런 거 완벽하게 안 챙기면 악몽 꿔요ㅠㅠ'],
+    ['20XX. 08. 28','형 저 마음고생을 넘 심하게 해서 살도 빠졌어요 2킬로 빠짐 ㅠㅠ']
+  ];
+
+  let queue = [];
+  let timer = null;
+  let running = false;
+  let lastDate = '';
+  let clickedButtons = new Set();
+  let lockscreenIndex = 0;
+  let lockscreenTimer = null;
+  const fixedDelay = 500;
+
+  const daysOfWeek = ['일', '월', '화', '수', '목', '금', '토'];
+
+  function formatLockDate(dateStr) {
+    const parts = dateStr.split('.');
+    if (parts.length >= 3) {
+      const month = parseInt(parts[1].trim(), 10);
+      const day = parseInt(parts[2].trim(), 10);
+      const dayIdx = (day + 3) % 7;
+      return month + '월 ' + day + '일 (' + daysOfWeek[dayIdx] + ')';
+    }
+    return dateStr;
+  }
+
+  function formatTimestamp(dateStr) {
+    const parts = dateStr.split('.');
+    if (parts.length >= 3) {
+      const month = parseInt(parts[1].trim(), 10);
+      const day = parseInt(parts[2].trim(), 10);
+      return month + '/' + day + '/20, 1:11 AM';
+    }
+    return '8/22/20, 1:11 AM';
+  }
+
+  function addDate(date) {
+    const parts = date.split('.');
+    let dividerText = date;
+    if (parts.length >= 3) {
+      const day = parseInt(parts[2].trim(), 10);
+      dividerText = 'August ' + day + ', 2020';
+    }
+    const el = document.createElement('div');
+    el.className = 'date-divider';
+    el.innerHTML = '<span>' + dividerText + '</span>';
+    chat.appendChild(el);
+  }
+
+  function addMessage(who, text, rawDate) {
+    const row = document.createElement('div');
+    row.className = 'msg';
+    
+    const isMe = who === 'YOU';
+    const name = isMe ? 'YOU' : '차롱';
+    const avatarBg = isMe ? '#5865F2' : '#eb459e';
+    const initial = isMe ? 'Y' : '차';
+    const timestampStr = formatTimestamp(rawDate || '20XX. 08. 22');
+    
+    row.innerHTML = `
+      <div class="avatar" style="background:${avatarBg}">${initial}</div>
+      <div class="msg-content">
+        <div class="msg-header">
+          <span class="username ${isMe ? 'me' : ''}">${name}</span>
+          <span class="timestamp">${timestampStr}</span>
+        </div>
+        <div class="msg-text">${text}</div>
+      </div>
+    `;
+    chat.appendChild(row);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function pushNotification(text) {
+    const card = document.createElement('div');
+    card.className = 'notification';
+    card.innerHTML = '<div class="notif-header"><span class="notif-title">DISCORD</span></div><div class="notif-body">차롱 : ' + text + '</div>';
+    card.addEventListener('click', unlockAndFillChat);
+    notifContainer.prepend(card);
+  }
+
+  function startLockscreenNotifications() {
+    if (lockscreenIndex < phase1Lines.length) {
+      const item = phase1Lines[lockscreenIndex];
+      lockDateEl.textContent = formatLockDate(item[0]);
+      pushNotification(item[1]);
+      lockscreenIndex++;
+      lockscreenTimer = setTimeout(startLockscreenNotifications, fixedDelay);
+    }
+  }
+
+  function unlockAndFillChat() {
+    if (lockscreenTimer) clearTimeout(lockscreenTimer);
+    lockscreen.classList.add('hide');
+
+    while (chat.firstChild) {
+      chat.removeChild(chat.firstChild);
+    }
+    
+    lastDate = '';
+    for (let i = 0; i < phase1Lines.length; i++) {
+      const date = phase1Lines[i][0];
+      const text = phase1Lines[i][1];
+      if (date !== lastDate) {
+        addDate(date);
+        lastDate = date;
+      }
+      addMessage('차롱', text, date);
+    }
+    // 알림을 눌러 채팅창을 열면 가장 위쪽 메시지부터 보이도록 이동
+    chat.scrollTop = 0;
+  }
+
+  function next() {
+    if (!running || queue.length === 0) {
+      running = false;
+      timer = null;
+      return;
+    }
+    const item = queue.shift();
+    if (item.date !== lastDate) {
+      addDate(item.date);
+      lastDate = item.date;
+    }
+    addMessage('차롱', item.text, item.date);
+    timer = setTimeout(next, fixedDelay);
+  }
+
+  function startQueue() {
+    if (running || queue.length === 0) return;
+    running = true;
+    next();
+  }
+
+  function sendMessage(text) {
+    if (!text) return;
+    addMessage('YOU', text, '20XX. 08. 28');
+    input.focus();
+  }
+
+  form.addEventListener('submit', function(event) {
+    event.preventDefault();
+    const value = input.value.trim();
+    if (!value) { input.focus(); return; }
+    sendMessage(value);
+    input.value = '';
+  });
+
+  quickBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (btn.classList.contains('disabled') || btn.classList.contains('used')) return;
+      
+      const msg = btn.getAttribute('data-msg');
+      const btnId = btn.getAttribute('data-id');
+      
+      btn.classList.add('used');
+      clickedButtons.add(btnId);
+      sendMessage(msg);
+
+      if (btnId === '1') {
+        btn2.classList.remove('disabled');
+      }
+
+      if (clickedButtons.size === 2) {
+        setTimeout(function() {
+          for (let i = 0; i < phase2Lines.length; i++) {
+            queue.push({date: phase2Lines[i][0], text: phase2Lines[i][1]});
+          }
+          if (!running) {
+            startQueue();
+          }
+        }, 500);
+      }
+    });
+  });
+
+  startLockscreenNotifications();
+})();
+</script>
+</body>
+</html>
